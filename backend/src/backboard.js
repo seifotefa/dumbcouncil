@@ -4,6 +4,19 @@ dotenv.config({ path: '../.env' })
 const BASE = 'https://app.backboard.io/api'
 const KEY = process.env.BACKBOARD_API_KEY
 
+export async function updateAssistant(assistantId, systemPrompt) {
+  // Try PUT first, fall back to PATCH
+  for (const method of ['PUT', 'PATCH']) {
+    const res = await fetch(`${BASE}/assistants/${assistantId}`, {
+      method,
+      headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system_prompt: systemPrompt }),
+    })
+    if (res.ok) { console.log(`updateAssistant OK (${method})`); return }
+    console.warn(`updateAssistant ${method} ${assistantId}: ${res.status} ${await res.text()}`)
+  }
+}
+
 export async function createAssistant(name, systemPrompt) {
   const res = await fetch(`${BASE}/assistants`, {
     method: 'POST',
@@ -44,8 +57,8 @@ export async function sendMessage(threadId, content) {
   const form = new URLSearchParams()
   form.append('content', content)
   form.append('stream', 'false')
-  form.append('llm_provider', 'anthropic')
-  form.append('model_name', 'claude-haiku-4-5-20251001')
+  form.append('llm_provider', 'google')
+  form.append('model_name', 'gemini-2.5-flash')
   form.append('memory', 'off')
 
   const res = await fetch(`${BASE}/threads/${threadId}/messages`, {

@@ -1,11 +1,17 @@
-import { useEffect, useReducer, useRef } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import styles from './Council.module.css'
 
-const ROUND_LABELS = {
-  1: 'Round I — Opening Arguments',
-  2: 'Round II — Rebuttals',
-  3: 'Round III — Closing Statements',
+const ROUND_LABELS = { 1: 'ROUND I', 2: 'ROUND II', 3: 'ROUND III' }
+
+function strip(text) {
+  if (!text) return text
+  return text
+    .replace(/\*\*(.+?)\*\*/gs, '$1')
+    .replace(/\*(.+?)\*/gs, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .trim()
 }
 
 const initialState = {
@@ -13,7 +19,7 @@ const initialState = {
   round: 0,
   isLastRound: false,
   currentSide: null,
-  entries: [],    // { side, agentName, title, color, round, content, isJudgment, streaming }
+  entries: [],
   winner: null,
   forAgent: null,
   againstAgent: null,
@@ -23,7 +29,6 @@ const initialState = {
 
 function reducer(state, action) {
   switch (action.type) {
-
     case 'init':
       return { ...state, question: action.question, forAgent: action.forAgent, againstAgent: action.againstAgent }
 
@@ -31,7 +36,6 @@ function reducer(state, action) {
       return { ...state, phase: 'debating', round: action.round }
 
     case 'turn_start':
-      // Create the entry immediately — tokens will update it in-place
       return {
         ...state,
         currentSide: action.side,
@@ -60,11 +64,10 @@ function reducer(state, action) {
     }
 
     case 'turn_end': {
-      // Mark last entry as done; prefer frontend-accumulated content over backend's
       const entries = [...state.entries]
       const last = { ...entries[entries.length - 1] }
       last.streaming = false
-      if (action.content && !last.content) last.content = action.content
+      last.content = strip(last.content || action.content || '')
       entries[entries.length - 1] = last
       return { ...state, currentSide: null, entries }
     }
@@ -81,8 +84,8 @@ function reducer(state, action) {
           ...state.entries,
           {
             side: 'judge',
-            agentName: 'Chief Justice Verdictus',
-            title: 'Supreme Arbiter of the Council',
+            agentName: 'The Judge',
+            title: 'Definitely Impartial',
             color: '#c9a84c',
             round: 0,
             content: '',
@@ -105,7 +108,7 @@ function reducer(state, action) {
       const entries = [...state.entries]
       const last = { ...entries[entries.length - 1] }
       last.streaming = false
-      if (action.judgment && !last.content) last.content = action.judgment
+      last.content = strip(last.content || action.judgment || '')
       entries[entries.length - 1] = last
       return { ...state, phase: 'complete', winner: action.winner, currentSide: null, entries }
     }
@@ -128,8 +131,8 @@ function reducer(state, action) {
         })),
         ...(s.judgment ? [{
           side: 'judge',
-          agentName: 'Chief Justice Verdictus',
-          title: 'Supreme Arbiter of the Council',
+          agentName: 'The Judge',
+          title: 'Definitely Impartial',
           color: '#c9a84c',
           round: 0,
           content: s.judgment,
@@ -153,51 +156,97 @@ function reducer(state, action) {
   }
 }
 
-function AgentProfile({ agent, side, isActive, isWinner }) {
-  if (!agent) return <div className={styles.agentPlaceholder} />
-  const sideColor = side === 'for' ? 'var(--for)' : 'var(--against)'
-  const label = side === 'for' ? 'FOR' : 'AGAINST'
-  const initials = agent.name.split(' ').map(w => w[0]).join('').slice(0, 2)
-
+function Bubble({ entry, side }) {
+  if (!entry) return null
   return (
-    <div
-      className={`${styles.agentProfile} ${isActive ? styles.agentActive : ''} ${isWinner ? styles.agentWinner : ''}`}
-      style={{ '--side-color': sideColor, '--agent-color': agent.color }}
-    >
-      <div className={styles.sideLabel} style={{ background: sideColor }}>{label}</div>
-      <div className={styles.avatar} style={{ background: agent.color }}>{initials}</div>
-      <div className={styles.agentName}>{agent.name}</div>
-      <div className={styles.agentTitle}>{agent.title}</div>
-      {isActive && <div className={styles.speakingRing} />}
-      {isWinner && <div className={styles.winnerCrown}>WINNER</div>}
+    <div className={`${styles.bubble} ${side === 'judge' ? styles.bubbleJudge : ''}`}
+         style={{ '--side-color': side === 'for' ? 'var(--for)' : side === 'against' ? 'var(--against)' : '#c9a84c' }}>
+      <div className={styles.bubbleText}>
+        {entry.content
+          ? <>{entry.content}{entry.streaming && <span className={styles.cursor}>▌</span>}</>
+          : entry.streaming
+            ? <span className={styles.ellipsis}>▪ ▪ ▪</span>
+            : null}
+      </div>
     </div>
   )
 }
 
-function SpeechBlock({ entry }) {
-  const sideColor = entry.side === 'for' ? 'var(--for)' : entry.side === 'against' ? 'var(--against)' : 'var(--gold)'
+function AgentAvatar({ agentKey, agentColor, agentName, large }) {
+  const [failed, setFailed] = useState(false)
+  const initials = agentName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+
+  if (!failed) {
+    return (
+      <img
+        src={`/sprites/${agentKey}.png`}
+        className={large ? styles.avatarImgLarge : styles.avatarImg}
+        alt={agentName}
+        onError={() => setFailed(true)}
+      />
+    )
+  }
+  return (
+    <div className={large ? styles.avatarLarge : styles.avatar} style={{ background: agentColor }}>
+      <span className={styles.avatarInitials}>{initials}</span>
+    </div>
+  )
+}
+
+function Character({ agent, side, isActive, isDimmed, isWinner, speech }) {
+  if (!agent) return null
+  const sideColor = side === 'for' ? 'var(--for)' : 'var(--against)'
 
   return (
     <div
-      className={`${styles.speech} ${entry.side === 'for' ? styles.speechFor : ''} ${entry.isJudgment ? styles.speechJudge : ''}`}
-      style={{ '--side-color': sideColor }}
+      className={[
+        styles.character,
+        side === 'for' ? styles.charFor : styles.charAgainst,
+        isActive ? styles.charActive : '',
+        isDimmed && !isWinner ? styles.charDimmed : '',
+        isWinner ? styles.charWinner : '',
+      ].filter(Boolean).join(' ')}
+      style={{ '--agent-color': agent.color, '--side-color': sideColor }}
     >
-      <div className={styles.speechMeta}>
-        <span className={styles.speechName} style={{ color: entry.color || sideColor }}>{entry.agentName}</span>
-        {!entry.isJudgment && (
-          <span className={styles.speechSide} style={{ color: sideColor }}>
-            {entry.side === 'for' ? 'FOR' : 'AGAINST'}
-          </span>
-        )}
-        {entry.isJudgment && <span className={styles.speechSide} style={{ color: 'var(--gold)' }}>VERDICT</span>}
-        {entry.streaming && <span className={styles.speakingDot} style={{ background: sideColor }} />}
+      <Bubble entry={speech} side={side} />
+
+      <div className={styles.sprite}>
+        <AgentAvatar agentKey={agent.key} agentColor={agent.color} agentName={agent.name} />
+        {isActive && <div className={styles.speakingGlow} />}
       </div>
-      <p className={styles.speechText}>
-        {entry.content || (entry.streaming ? <span className={styles.thinking}>deliberating…</span> : '')}
-        {entry.streaming && entry.content && (
-          <span className={styles.cursor} style={{ color: sideColor }}>▌</span>
-        )}
-      </p>
+
+      <div className={styles.spriteMeta}>
+        <div className={styles.sideTag} style={{ background: sideColor }}>
+          {side === 'for' ? 'FOR' : 'AGAINST'}
+        </div>
+        <div className={styles.spriteName}>{agent.name}</div>
+        <div className={styles.spriteTitle}>{agent.title}</div>
+      </div>
+
+      {isWinner && <div className={styles.winnerBadge}>★ WINNER ★</div>}
+    </div>
+  )
+}
+
+function JudgeCharacter({ entry, isActive }) {
+  return (
+    <div
+      className={[
+        styles.judge,
+        isActive ? styles.judgeActive : '',
+      ].filter(Boolean).join(' ')}
+      style={{ '--side-color': '#c9a84c' }}
+    >
+      <Bubble entry={entry} side="judge" />
+      <div className={styles.sprite}>
+        <AgentAvatar agentKey="judge" agentColor="#c9a84c" agentName="The Judge" large />
+        {isActive && <div className={styles.speakingGlow} />}
+      </div>
+      <div className={styles.spriteMeta}>
+        <div className={styles.sideTag} style={{ background: '#c9a84c', color: '#1a1208' }}>VERDICT</div>
+        <div className={styles.spriteName}>The Judge</div>
+        <div className={styles.spriteTitle}>Definitely Impartial</div>
+      </div>
     </div>
   )
 }
@@ -207,7 +256,6 @@ export default function Council() {
   const navigate = useNavigate()
   const location = useLocation()
   const [state, dispatch] = useReducer(reducer, initialState)
-  const feedRef = useRef(null)
 
   useEffect(() => {
     const nav = location.state
@@ -232,95 +280,211 @@ export default function Council() {
     return () => es.close()
   }, [sessionId])
 
-  useEffect(() => {
-    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' })
-  }, [state.entries])
-
   async function handleNext() {
     await fetch(`/debate/${sessionId}/next`, { method: 'POST' })
   }
 
-  // Group non-judgment entries by round for display
-  const byRound = []
-  for (const entry of state.entries) {
-    if (entry.isJudgment) continue
-    const existing = byRound.find(r => r.round === entry.round)
-    if (existing) existing.entries.push(entry)
-    else byRound.push({ round: entry.round, entries: [entry] })
+  async function handleDownloadVerdict() {
+    const { question, winner, entries, forAgent, againstAgent } = state
+    const judgment = entries.find(e => e.isJudgment)?.content || ''
+
+    await document.fonts.load('bold 16px "Press Start 2P"')
+
+    const W = 900, H = 600
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const c = canvas.getContext('2d')
+
+    // Background
+    c.fillStyle = '#0d0f14'
+    c.fillRect(0, 0, W, H)
+
+    // Outer gold border
+    c.strokeStyle = '#c9a84c'
+    c.lineWidth = 5
+    c.strokeRect(18, 18, W - 36, H - 36)
+    // Inner dim border
+    c.strokeStyle = '#4a3a1a'
+    c.lineWidth = 1
+    c.strokeRect(28, 28, W - 56, H - 56)
+
+    const cx = W / 2
+    c.textAlign = 'center'
+
+    // Title
+    c.fillStyle = '#c9a84c'
+    c.font = 'bold 18px "Press Start 2P", monospace'
+    c.fillText('⚖  THE DUMB COUNCIL  ⚖', cx, 80)
+
+    // Divider
+    const div = (y) => { c.strokeStyle = '#4a3a1a'; c.lineWidth = 1; c.beginPath(); c.moveTo(60, y); c.lineTo(W - 60, y); c.stroke() }
+    div(100)
+
+    // "has deliberated on"
+    c.fillStyle = '#666'
+    c.font = '8px "Press Start 2P", monospace'
+    c.fillText('THE COUNCIL HAS DELIBERATED ON:', cx, 130)
+
+    // Question
+    c.fillStyle = '#e8e6e0'
+    c.font = 'italic 17px Georgia, serif'
+    drawWrapped(c, `"${question}"`, cx, 162, W - 140, 26)
+
+    div(230)
+
+    // Winner declaration
+    c.fillStyle = '#888'
+    c.font = '8px "Press Start 2P", monospace'
+    c.fillText('AND HEREBY DECLARES THE WINNER:', cx, 260)
+
+    const winColor = winner?.side === 'for' ? '#27ae60' : '#e74c3c'
+    c.fillStyle = winColor
+    c.font = 'bold 22px "Press Start 2P", monospace'
+    c.fillText((winner?.name || 'UNKNOWN').toUpperCase(), cx, 302)
+
+    div(325)
+
+    // Judgment quote
+    c.fillStyle = '#777'
+    c.font = '9px "Press Start 2P", monospace'
+    c.fillText('THE JUDGE RULED:', cx, 352)
+
+    c.fillStyle = '#bbb'
+    c.font = 'italic 14px Georgia, serif'
+    const shortJudgment = judgment.length > 220 ? judgment.slice(0, 220) + '…' : judgment
+    drawWrapped(c, `"${shortJudgment}"`, cx, 380, W - 120, 24)
+
+    div(510)
+
+    // Footer
+    c.fillStyle = '#4a3a1a'
+    c.font = '8px "Press Start 2P", monospace'
+    c.fillText('dumbcouncil.app', cx, 545)
+
+    // Wax seal placeholder
+    c.beginPath()
+    c.arc(W - 80, H - 80, 36, 0, Math.PI * 2)
+    c.fillStyle = '#1a0a00'
+    c.fill()
+    c.strokeStyle = '#c9a84c'
+    c.lineWidth = 2
+    c.stroke()
+    c.fillStyle = '#c9a84c'
+    c.font = 'bold 14px "Press Start 2P", monospace'
+    c.fillText('⚖', W - 80, H - 73)
+
+    const link = document.createElement('a')
+    link.download = 'dumb-council-verdict.png'
+    link.href = canvas.toDataURL('image/png')
+    link.click()
   }
+
+  function drawWrapped(ctx, text, x, y, maxW, lineH) {
+    const words = text.split(' ')
+    let line = ''
+    let curY = y
+    for (const word of words) {
+      const test = line + word + ' '
+      if (ctx.measureText(test).width > maxW && line) {
+        ctx.fillText(line.trim(), x, curY)
+        line = word + ' '
+        curY += lineH
+      } else {
+        line = test
+      }
+    }
+    ctx.fillText(line.trim(), x, curY)
+  }
+
+  const { round, phase, currentSide, forAgent, againstAgent, winner, question, error } = state
+
+  const forSpeech = [...state.entries].reverse().find(e => e.side === 'for' && e.round === round) || null
+  const againstSpeech = [...state.entries].reverse().find(e => e.side === 'against' && e.round === round) || null
   const judgmentEntry = state.entries.find(e => e.isJudgment)
-  const isActiveFor = state.currentSide === 'for'
-  const isActiveAgainst = state.currentSide === 'against'
+
+  const someoneSpeaking = !!currentSide
+  const isJudgmentPhase = phase === 'judgment' || !!judgmentEntry
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <span className={styles.logo} onClick={() => navigate('/')}>⚖ Dumb Council</span>
-        {state.question && <span className={styles.question}>"{state.question}"</span>}
-        {state.round > 0 && (
-          <span className={styles.roundPill}>
-            {state.phase === 'judgment' ? 'Judgment'
-              : state.phase === 'complete' ? 'Session Complete'
-              : ROUND_LABELS[state.round]}
-          </span>
-        )}
+      <header className={styles.hud}>
+        <span className={styles.hudLogo} onClick={() => navigate('/')}>⚖ Dumb Council</span>
+        {question && <span className={styles.hudQuestion}>"{question}"</span>}
+        <span className={styles.hudRound}>
+          {phase === 'connecting' ? 'CONVENING'
+            : isJudgmentPhase && phase !== 'complete' ? 'JUDGMENT'
+            : phase === 'complete' ? 'SESSION COMPLETE'
+            : ROUND_LABELS[round] || ''}
+        </span>
       </header>
 
-      <div className={styles.bench}>
-        <AgentProfile agent={state.forAgent} side="for" isActive={isActiveFor} isWinner={state.winner?.side === 'for'} />
-        <div className={styles.vs}>VS</div>
-        <AgentProfile agent={state.againstAgent} side="against" isActive={isActiveAgainst} isWinner={state.winner?.side === 'against'} />
-      </div>
-
-      <div className={styles.feed} ref={feedRef}>
-        {state.phase === 'connecting' && (
-          <div className={styles.status}>The Council is convening. Stand by.</div>
+      <div className={styles.scene}>
+        {phase === 'connecting' && (
+          <div className={styles.convening}>THE COUNCIL CONVENES...</div>
         )}
 
-        {byRound.map(({ round, entries }) => (
-          <div key={round} className={styles.roundBlock}>
-            <div className={styles.roundLabel}>{ROUND_LABELS[round]}</div>
-            {entries.map((entry, i) => <SpeechBlock key={i} entry={entry} />)}
+        {error && (
+          <div className={styles.convening} style={{ color: '#c0392b' }}>
+            COUNCIL CANNOT CONVENE<br />
+            <span style={{ fontSize: '7px' }}>{error}</span>
           </div>
-        ))}
+        )}
+
+        <Character
+          agent={forAgent}
+          side="for"
+          isActive={currentSide === 'for'}
+          isDimmed={someoneSpeaking && currentSide !== 'for'}
+          isWinner={winner?.side === 'for'}
+          speech={isJudgmentPhase ? null : forSpeech}
+        />
 
         {judgmentEntry && (
-          <div className={styles.roundBlock}>
-            <div className={styles.roundLabel} style={{ color: 'var(--gold)', borderColor: 'var(--gold-dim)' }}>
-              Judgment
-            </div>
-            <SpeechBlock entry={judgmentEntry} />
-            {state.phase === 'complete' && state.winner && (
-              <div className={styles.verdictBanner}>
-                The Council finds in favour of <strong>{state.winner.name}</strong>
-              </div>
-            )}
-          </div>
+          <JudgeCharacter
+            entry={judgmentEntry}
+            isActive={currentSide === 'judge'}
+          />
         )}
 
-        {state.phase === 'error' && (
-          <div className={styles.error}>
-            The Council cannot convene at this time. A quorum has not been reached.
-            {state.error && <small>{state.error}</small>}
+        <Character
+          agent={againstAgent}
+          side="against"
+          isActive={currentSide === 'against'}
+          isDimmed={someoneSpeaking && currentSide !== 'against'}
+          isWinner={winner?.side === 'against'}
+          speech={isJudgmentPhase ? null : againstSpeech}
+        />
+
+        {phase === 'complete' && winner && (
+          <div className={styles.verdictBanner}>
+            THE COUNCIL FINDS IN FAVOUR OF&nbsp;
+            <span style={{ color: winner.side === 'for' ? 'var(--for)' : 'var(--against)' }}>
+              {winner.name}
+            </span>
           </div>
         )}
-
-        <div style={{ height: 8 }} />
       </div>
 
-      {(state.phase === 'round_complete' || state.phase === 'complete') && (
+      {(phase === 'round_complete' || phase === 'complete') && (
         <div className={styles.actionBar}>
-          {state.phase === 'round_complete' && (
-            <button className="btn-primary" onClick={handleNext}>
-              {state.isLastRound ? 'Summon the Judge →' : `${ROUND_LABELS[state.round + 1]} →`}
+          {phase === 'round_complete' && (
+            <button className={styles.pixelBtn} onClick={handleNext}>
+              {state.isLastRound ? '[ SUMMON THE JUDGE ]' : `[ ${ROUND_LABELS[round + 1] || 'NEXT'} → ]`}
             </button>
           )}
-          {state.phase === 'complete' && (
+          {phase === 'complete' && (
             <>
-              <button className="btn-ghost" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/session/${sessionId}`)}>
-                Copy Share Link
+              <button className={styles.pixelBtn} onClick={handleDownloadVerdict}>
+                [ DOWNLOAD VERDICT ]
               </button>
-              <button className="btn-ghost" onClick={() => navigate('/')}>New Session</button>
+              <button className={styles.pixelBtnGhost}
+                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/session/${sessionId}`)}>
+                [ COPY LINK ]
+              </button>
+              <button className={styles.pixelBtnGhost} onClick={() => navigate('/')}>
+                [ NEW SESSION ]
+              </button>
             </>
           )}
         </div>

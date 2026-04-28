@@ -1,9 +1,22 @@
-import { createThread, sendMessage, deleteThread } from './backboard.js'
+import { createThread, sendMessage, deleteThread, updateAssistant } from './backboard.js'
+
+// Neutral system prompt — wipes any old persona baked into the Backboard assistant
+const NEUTRAL_SYSTEM = `You are a debate assistant with no identity of your own. Your only job is to respond exactly as the character described in each user message. Follow character instructions precisely. Keep all responses short.`
 import { JUDGE, buildRoundPrompt, buildJudgePrompt } from './agents.js'
 
+function stripMarkdown(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/gs, '$1')
+    .replace(/\*(.+?)\*/gs, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .trim()
+}
+
 async function streamTurn(threadId, content, onToken) {
-  const full = await sendMessage(threadId, content)
-  if (!full) return ''
+  const raw = await sendMessage(threadId, content)
+  if (!raw) return ''
+  const full = stripMarkdown(raw)
 
   // Simulate word-by-word streaming so the frontend sees live text
   const chunks = full.match(/\S+\s*/g) || []
@@ -36,6 +49,13 @@ function detectWinner(judgment, forAgent, againstAgent) {
 
 export async function runDebate(session, broadcast) {
   const { question, assistantIds, forAgent, againstAgent } = session
+
+  // Wipe old assistant personas so per-message injection takes full effect
+  await Promise.all([
+    updateAssistant(assistantIds.for_counsel, NEUTRAL_SYSTEM),
+    updateAssistant(assistantIds.against_counsel, NEUTRAL_SYSTEM),
+    updateAssistant(assistantIds.chief_justice, NEUTRAL_SYSTEM),
+  ])
 
   // Create one thread per side + judge
   const forThread = await createThread(assistantIds.for_counsel)

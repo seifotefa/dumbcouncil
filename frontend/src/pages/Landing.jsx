@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './Landing.module.css'
 
+const MEMBERS = ['Tech Bro Tim', 'Doomer Dave', 'Conspiracy Carl', 'Philosopher Phil', 'Guru Gary']
+
 export default function Landing() {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
@@ -33,42 +35,45 @@ export default function Landing() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.crest}>⚖</div>
-      <h1 className={styles.title}>Dumb Council</h1>
-      <p className={styles.subtitle}>
-        Bring your question before the Council.<br />
-        They will deliberate. It will not help.
-      </p>
+      <div className={styles.overlay} />
 
-      <form className={styles.form} onSubmit={handleSubmit}>
-        <input
-          className={styles.input}
-          type="text"
-          placeholder="e.g. Is water healthy?"
-          value={question}
-          onChange={e => setQuestion(e.target.value)}
-          disabled={loading}
-          autoFocus
-          maxLength={300}
-        />
-        <button
-          className="btn-primary"
-          type="submit"
-          disabled={loading || !question.trim()}
-        >
-          {loading ? 'Convening…' : 'Convene the Council'}
-        </button>
-      </form>
+      <div className={styles.content}>
+        <div className={styles.crest}>⚖</div>
+        <h1 className={styles.title}>Dumb Council</h1>
+        <p className={styles.subtitle}>
+          Bring your question before the Council.<br />
+          They will deliberate. It will not help.
+        </p>
 
-      {error && <p className={styles.error}>The Council has encountered a procedural failure: {error}</p>}
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <input
+            className={styles.input}
+            type="text"
+            placeholder="e.g. Is water healthy?"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            disabled={loading}
+            autoFocus
+            maxLength={300}
+          />
+          <button className={styles.submitBtn} type="submit" disabled={loading || !question.trim()}>
+            {loading ? '[ CONVENING... ]' : '[ CONVENE THE COUNCIL ]'}
+          </button>
+        </form>
 
-      <div className={styles.members}>
-        {['Senator Alarmus', 'Professor Pedanticus', 'Lord Contrarius', 'Dame Doomsday', 'Sir Technobro'].map(name => (
-          <span key={name} className={styles.member}>{name}</span>
-        ))}
+        {error && <p className={styles.error}>COUNCIL ERROR: {error}</p>}
+
+        <div className={styles.roster}>
+          <div className={styles.rosterLabel}>COUNCIL MEMBERS</div>
+          <div className={styles.members}>
+            {MEMBERS.map(name => (
+              <span key={name} className={styles.member}>{name}</span>
+            ))}
+          </div>
+        </div>
+
+        <p className={styles.presiding}>PRESIDED OVER BY THE JUDGE — DEFINITELY IMPARTIAL</p>
       </div>
-
-      <p className={styles.presiding}>Presided over by Chief Justice Verdictus</p>
     </div>
   )
 }
