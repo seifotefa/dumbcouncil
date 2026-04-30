@@ -262,13 +262,15 @@ export default function Council() {
     if (nav?.forAgent && nav?.againstAgent) {
       dispatch({ type: 'init', question: nav.question, forAgent: nav.forAgent, againstAgent: nav.againstAgent })
     } else {
-      fetch(`/session/${sessionId}`)
+      const API = import.meta.env.VITE_API_URL || ''
+      fetch(`${API}/session/${sessionId}`)
         .then(r => r.json())
         .then(d => { if (d.forAgent) dispatch({ type: 'init', question: d.question, forAgent: d.forAgent, againstAgent: d.againstAgent }) })
         .catch(() => {})
     }
 
-    const es = new EventSource(`/debate/${sessionId}/stream`)
+    const API = import.meta.env.VITE_API_URL || ''
+    const es = new EventSource(`${API}/debate/${sessionId}/stream`)
     es.onmessage = e => {
       try {
         const event = JSON.parse(e.data)
@@ -281,7 +283,8 @@ export default function Council() {
   }, [sessionId])
 
   async function handleNext() {
-    await fetch(`/debate/${sessionId}/next`, { method: 'POST' })
+    const API = import.meta.env.VITE_API_URL || ''
+    await fetch(`${API}/debate/${sessionId}/next`, { method: 'POST' })
   }
 
   async function handleDownloadVerdict() {

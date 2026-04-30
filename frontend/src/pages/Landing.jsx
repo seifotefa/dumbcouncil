@@ -17,7 +17,8 @@ export default function Landing() {
     setError(null)
 
     try {
-      const res = await fetch('/debate', {
+      const API = import.meta.env.VITE_API_URL || ''
+      const res = await fetch(`${API}/debate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: question.trim() }),

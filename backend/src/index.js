@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import rateLimit from 'express-rate-limit'
 import { createSession, getSession, addClient, removeClient, publicSession } from './sessions.js'
 import { runDebate } from './debate.js'
 import { pickTwoAgents } from './agents.js'
@@ -11,6 +12,14 @@ dotenv.config({ path: '../.env' })
 const app = express()
 app.use(cors())
 app.use(express.json())
+
+const debateLimit = rateLimit({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many debates from this IP. Try again in 30 minutes.' },
+})
 
 // Reuse two existing assistant IDs as generic FOR/AGAINST counsel containers.
 // Persona is injected per-message — the original system prompts are overridden.
@@ -39,7 +48,7 @@ app.get('/models', async (req, res) => {
 })
 
 // POST /debate — start a new debate
-app.post('/debate', async (req, res) => {
+app.post('/debate', debateLimit, async (req, res) => {
   const { question } = req.body
   if (!question?.trim()) return res.status(400).json({ error: 'The Council requires a question.' })
 
