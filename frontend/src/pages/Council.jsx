@@ -228,7 +228,7 @@ function Character({ agent, side, isActive, isDimmed, isWinner, speech }) {
   )
 }
 
-function JudgeCharacter({ entry, isActive }) {
+function JudgeCharacter({ isActive }) {
   return (
     <div
       className={[
@@ -237,7 +237,6 @@ function JudgeCharacter({ entry, isActive }) {
       ].filter(Boolean).join(' ')}
       style={{ '--side-color': '#c9a84c' }}
     >
-      <Bubble entry={entry} side="judge" />
       <div className={styles.sprite}>
         <AgentAvatar agentKey="judge" agentColor="#c9a84c" agentName="The Judge" large />
         {isActive && <div className={styles.speakingGlow} />}
@@ -444,10 +443,12 @@ export default function Council() {
         />
 
         {judgmentEntry && (
-          <JudgeCharacter
-            entry={judgmentEntry}
-            isActive={currentSide === 'judge'}
-          />
+          <>
+            <div className={styles.judgeBubbleWrap}>
+              <Bubble entry={judgmentEntry} side="judge" />
+            </div>
+            <JudgeCharacter isActive={currentSide === 'judge'} />
+          </>
         )}
 
         <Character

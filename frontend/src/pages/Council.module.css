@@ -287,6 +287,16 @@
   100% { transform: translateX(-50%) scale(1); opacity: 1; }
 }
 
+/* ─── Judge bubble — centered in scene ──────────────── */
+
+.judgeBubbleWrap {
+  position: absolute;
+  top: 28%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+}
+
 /* ─── Speech Bubble ──────────────────────────────────── */
 
 .bubble {
